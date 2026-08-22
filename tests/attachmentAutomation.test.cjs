@@ -549,6 +549,42 @@ test("an exact existing linked destination is reused without creating another it
   assert.equal(harness.calls.newItems.length, 0);
 });
 
+test("manual move uses the plural collection API when the singular API was removed", async () => {
+  harness = createHarness({
+    directories: ["/source", "/dest"],
+    files: ["/source/paper.pdf"],
+    prefs: { destDir: "/dest", subfolderFormat: "" },
+  });
+  const parent = createRegularItem(harness, { id: 93 });
+  const attachment = createAttachment(harness, {
+    id: 94,
+    mode: "imported",
+    parent,
+    path: "/source/paper.pdf",
+  });
+  harness.selectedItems = [attachment];
+  harness.selectedCollection = { id: 12, name: "Research" };
+  global.ZoteroPane.getSelectedCollections = () => [harness.selectedCollection];
+  global.ZoteroPane.getSelectedCollection = () => {
+    throw new Error(
+      "ZoteroPane.getSelectedCollection() was removed -- use ZoteroPane.getSelectedCollections()",
+    );
+  };
+  const menu = new harness.module.default();
+  const rootMenu = harness.menuRegistrations.find(
+    ({ type, config }) => type === "item" && config.id === "attanger-menu",
+  ).config;
+  const moveAttachment = rootMenu.children.find(
+    (child) => child.id === "attanger-move-attachment",
+  );
+
+  await moveAttachment.commandListener();
+
+  assert.equal(harness.calls.newItems.length, 1);
+  assert.equal(attachment.calls.erase, 1);
+  menu.dispose();
+});
+
 test("Match Attanger Attachment creates links instead of imported copies", async () => {
   harness = createHarness({
     baseName: "Expected",
