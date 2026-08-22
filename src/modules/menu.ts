@@ -33,6 +33,16 @@ function getShortcutHint(shortcutPref: string) {
  */
 let selectedCollection: Zotero.Collection | undefined;
 
+function getSelectedCollectionCompat() {
+  const pane = ZoteroPane as typeof ZoteroPane & {
+    getSelectedCollections?: () => Zotero.Collection[];
+  };
+  if (pane.getSelectedCollections) {
+    return pane.getSelectedCollections()[0];
+  }
+  return pane.getSelectedCollection() as Zotero.Collection | undefined;
+}
+
 /** 正在被 moveFile 处理的源文件路径集合，防止并发重复调用 */
 const movingPaths = new Set<string>();
 /** Attanger 正在修改的附件，避免自身 saveTx 再次触发自动重命名 */
@@ -437,7 +447,7 @@ export default class Menu {
     };
 
     const renameMoveAttachmentCallback = async () => {
-      selectedCollection = ZoteroPane.getSelectedCollection();
+      selectedCollection = getSelectedCollectionCompat();
       const attachmentItems = getAttachmentItems(false);
       if (!attachmentItems.length) {
         showMoveMessage("No attachment selected.");
@@ -487,7 +497,7 @@ export default class Menu {
     };
 
     const moveAttachmentCallback = async () => {
-      selectedCollection = ZoteroPane.getSelectedCollection();
+      selectedCollection = getSelectedCollectionCompat();
       for (const item of getAttachmentItems(false)) {
         try {
           const attItem = await moveFile(item);
@@ -689,8 +699,8 @@ export default class Menu {
         return ZoteroPane.getCollectionTreeRow()?.isCollection();
       },
       commandListener: async (_ev) => {
-        const collection =
-          ZoteroPane.getSelectedCollection() as Zotero.Collection;
+        const collection = getSelectedCollectionCompat();
+        if (!collection) return;
         await attachNewFile({
           libraryID: collection.libraryID,
           parentItemID: undefined,
@@ -1764,7 +1774,7 @@ function showAttachmentItem(attItem: Zotero.Item) {
   if (attItem && attItem.isTopLevelItem()) {
     popupWin
       .createLine({
-        text: (ZoteroPane.getSelectedCollection() as Zotero.Collection).name,
+        text: getSelectedCollectionCompat()?.name || "My Library",
         icon: addon.data.icons.collection,
       })
       .show();
