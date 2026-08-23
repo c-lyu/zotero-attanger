@@ -27,6 +27,7 @@ jobs:
       - name: Install deps
         run: >-
           npm install
+          --legacy-peer-deps
           --no-audit
           --no-fund
           --fetch-retries=5
