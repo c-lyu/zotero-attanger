@@ -368,6 +368,199 @@ test("only imported attachments enter automatic move while linked files retain a
   menu.dispose();
 });
 
+test("standalone imported PDFs remain untouched when automatic recognition is disabled", async () => {
+  harness = createHarness({
+    directories: ["/source", "/dest"],
+    files: ["/source/standalone.pdf"],
+    autoRenameFiles: true,
+    prefs: {
+      autoMove: true,
+      autoRecognizeImportedPDF: false,
+      destDir: "/dest",
+      subfolderFormat: "",
+    },
+  });
+  const attachment = createAttachment(harness, {
+    id: 63,
+    mode: "imported",
+    path: "/source/standalone.pdf",
+  });
+  const menu = new harness.module.default();
+
+  await menu.processAddedAttachment(attachment);
+
+  assert.deepEqual(harness.calls.recognize, []);
+  assert.deepEqual(attachment.calls.rename, []);
+  assert.deepEqual(harness.calls.copy, []);
+  assert.deepEqual(harness.calls.newItems, []);
+  menu.dispose();
+});
+
+test("enabled automatic recognition creates the parent before rename and move", async () => {
+  harness = createHarness({
+    baseName: "Recognized-Key",
+    directories: ["/source", "/dest"],
+    files: ["/source/standalone.pdf"],
+    autoRenameFiles: true,
+    prefs: {
+      autoMove: true,
+      destDir: "/dest",
+      subfolderFormat: "",
+    },
+    recognizeItems: async ([item], currentHarness) => {
+      const parent = createRegularItem(currentHarness, { id: 65 });
+      item.parentItemID = parent.id;
+      item.parentItem = parent;
+      item.topLevelItem = parent;
+      parent.attachmentIDs.push(item.id);
+    },
+  });
+  const attachment = createAttachment(harness, {
+    id: 64,
+    mode: "imported",
+    path: "/source/standalone.pdf",
+  });
+  const menu = new harness.module.default();
+
+  await menu.processAddedAttachment(attachment);
+
+  assert.deepEqual(harness.calls.recognize, [[attachment.id]]);
+  assert.deepEqual(attachment.calls.rename, ["Recognized-Key.pdf"]);
+  assert.deepEqual(harness.calls.copy, [
+    ["/source/Recognized-Key.pdf", "/dest/Recognized-Key.pdf"],
+  ]);
+  menu.dispose();
+});
+
+test("automatic recognition failure leaves a standalone PDF untouched", async () => {
+  harness = createHarness({
+    directories: ["/source", "/dest"],
+    files: ["/source/unrecognized.pdf"],
+    autoRenameFiles: true,
+    prefs: {
+      autoMove: true,
+      autoRecognizeImportedPDF: true,
+      destDir: "/dest",
+    },
+  });
+  const attachment = createAttachment(harness, {
+    id: 66,
+    mode: "imported",
+    path: "/source/unrecognized.pdf",
+  });
+  const menu = new harness.module.default();
+
+  await menu.processAddedAttachment(attachment);
+
+  assert.deepEqual(harness.calls.recognize, [[attachment.id]]);
+  assert.deepEqual(attachment.calls.rename, []);
+  assert.deepEqual(harness.calls.copy, []);
+  assert.deepEqual(harness.calls.newItems, []);
+  menu.dispose();
+});
+
+test("PDF recognition timeout returns control to the caller", async () => {
+  harness = createHarness({
+    pdfWorkerEnqueue: () => new Promise(() => {}),
+  });
+
+  const recognition = harness.module.getPDFData("/source/stalled.pdf");
+  const rejection = assert.rejects(recognition, /PDF recognizer timed out/);
+  await harness.clock.runAll();
+
+  await rejection;
+  assert.ok(
+    harness.logs.some(
+      ([entry]) => entry instanceof Error && /timed out/.test(entry.message),
+    ),
+  );
+});
+
+test("automatic processing renames imported files before moving them into the shared destination", async () => {
+  harness = createHarness({
+    baseName: "Parent-Key",
+    directories: ["/source", "/dest"],
+    files: ["/source/translation.pdf"],
+    autoRenameFiles: true,
+    prefs: { autoMove: true, destDir: "/dest", subfolderFormat: "" },
+  });
+  const parent = createRegularItem(harness, { id: 67 });
+  const attachment = createAttachment(harness, {
+    id: 68,
+    mode: "imported",
+    parent,
+    path: "/source/translation.pdf",
+  });
+  const menu = new harness.module.default();
+
+  await menu.processAddedAttachment(attachment);
+
+  assert.deepEqual(attachment.calls.rename, ["Parent-Key.pdf"]);
+  assert.deepEqual(harness.calls.copy, [
+    ["/source/Parent-Key.pdf", "/dest/Parent-Key.pdf"],
+  ]);
+  assert.equal(harness.calls.newItems[0].currentPath, "/dest/Parent-Key.pdf");
+  menu.dispose();
+});
+
+test("multiple imported PDFs keep distinct linked paths and are not processed twice", async () => {
+  harness = createHarness({
+    baseName: "Parent-Key",
+    directories: ["/storage/first", "/storage/second", "/dest"],
+    files: [
+      "/dest/Parent-Key.pdf",
+      "/storage/first/mono.pdf",
+      "/storage/second/dual.pdf",
+    ],
+    autoRenameFiles: true,
+    notifyOnCreatedItemSave: true,
+    notifyCreatedItemWithParent: true,
+    rejectExistingCopy: true,
+    prefs: { autoMove: true, destDir: "/dest", subfolderFormat: "" },
+  });
+  const parent = createRegularItem(harness, { id: 69 });
+  createAttachment(harness, {
+    id: 70,
+    mode: "linked",
+    parent,
+    path: "/dest/Parent-Key.pdf",
+  });
+  const mono = createAttachment(harness, {
+    id: 71,
+    mode: "imported",
+    parent,
+    path: "/storage/first/mono.pdf",
+  });
+  const dual = createAttachment(harness, {
+    id: 72,
+    mode: "imported",
+    parent,
+    path: "/storage/second/dual.pdf",
+  });
+  const menu = new harness.module.default();
+
+  await menu.processAddedAttachment(mono);
+  await menu.processAddedAttachment(dual);
+  await harness.clock.runAll();
+
+  assert.deepEqual(
+    harness.calls.newItems.map((item) => item.currentPath),
+    ["/dest/Parent-Key_1.pdf", "/dest/Parent-Key_2.pdf"],
+  );
+  assert.deepEqual(
+    harness.calls.newItems.map((item) => item.renameCalls),
+    [[], []],
+  );
+  assert.equal(
+    new Set([
+      "/dest/Parent-Key.pdf",
+      ...harness.calls.newItems.map((item) => item.currentPath),
+    ]).size,
+    3,
+  );
+  menu.dispose();
+});
+
 test("recreating and disposing Menu leaves one notifier and clears pending timers", async () => {
   harness = createHarness();
   const first = new harness.module.default();
@@ -521,7 +714,7 @@ test("move failures return without recursive retries", async () => {
   assert.equal(harness.calls.newItems.length, 0);
 });
 
-test("an exact existing linked destination is reused without creating another item", async () => {
+test("an identical existing destination still receives a unique attachment path", async () => {
   harness = createHarness({
     directories: ["/source", "/dest"],
     files: ["/source/paper.pdf", "/dest/paper.pdf"],
@@ -542,11 +735,14 @@ test("an exact existing linked destination is reused without creating another it
     path: "/dest/paper.pdf",
   });
 
-  const result = await harness.module.moveFile(source);
+  const result = await harness.module.moveFile(source, { silent: true });
 
-  assert.equal(result, linked);
-  assert.equal(harness.calls.copy.length, 0);
-  assert.equal(harness.calls.newItems.length, 0);
+  assert.notEqual(result, linked);
+  assert.deepEqual(harness.calls.copy, [
+    ["/source/paper.pdf", "/dest/paper_1.pdf"],
+  ]);
+  assert.equal(harness.calls.newItems.length, 1);
+  assert.equal(result.currentPath, "/dest/paper_1.pdf");
 });
 
 test("manual move uses the plural collection API when the singular API was removed", async () => {

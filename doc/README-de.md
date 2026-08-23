@@ -150,22 +150,23 @@ keine Umbenennungsschleife.
 
 ## Einstellungen
 
-| Einstellung                            | Verhalten                                                                                                                       |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Quellpfad                              | Eingabeordner für Neue Datei anhängen und beide Zuordnungsbefehle.                                                              |
-| Anhangstyp                             | Gespeicherte Zotero-Kopie oder verknüpfte Datei unter dem Zielpfad.                                                             |
-| Zielpfad                               | Stammordner für Verschieben/Kopieren im Verknüpfungsmodus.                                                                      |
-| Unterordner                            | Metadatenvorlage; `{{collection}}` verwendet den Sammlungspfad.                                                                 |
-| `/` als Unterordner                    | Behält durch Vorlagenvariablen erzeugte Ebenen bei.                                                                             |
-| Automatisch beim Hinzufügen umbenennen | Globale Zotero-Einstellung zur Umbenennung neuer Anhänge.                                                                       |
-| Bei Eintragsänderung umbenennen        | Optionale nachträgliche Umbenennung mit Zeiten in Millisekunden.                                                                |
-| Automatisch verschieben                | Wandelt neue importierte Anhänge in verknüpfte Dateien um; bestehende Verknüpfungen werden nicht erneut automatisch verschoben. |
-| Leere Ordner löschen                   | Bereinigt nur innerhalb des Zotero-Speichers, Quell- oder Zielpfads.                                                            |
-| Originaldateien behalten               | Macht aus Verschieben ein Kopieren und verhindert Quellbereinigung.                                                             |
-| Anhangstitel synchronisieren           | Aktualisiert nach dem Umbenennen den Titel in Zotero.                                                                           |
-| Diakritische Zeichen entfernen         | Wandelt Diakritika und Ligaturen im endgültigen Basisnamen einschließlich eines beibehaltenen Präfixes um; die Endung bleibt.   |
-| Dateitypen                             | Kommagetrennte Endungen ohne Punkt. Standard: `pdf,doc,docx,txt,rtf,djvu,epub`.                                                 |
-| Dateinamensregeln                      | Kommagetrennte reguläre Ausdrücke für Präfixe und Ausnahmen.                                                                    |
+| Einstellung                            | Verhalten                                                                                                                              |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Quellpfad                              | Eingabeordner für Neue Datei anhängen und beide Zuordnungsbefehle.                                                                     |
+| Anhangstyp                             | Gespeicherte Zotero-Kopie oder verknüpfte Datei unter dem Zielpfad.                                                                    |
+| Zielpfad                               | Stammordner für Verschieben/Kopieren im Verknüpfungsmodus.                                                                             |
+| Unterordner                            | Metadatenvorlage; `{{collection}}` verwendet den Sammlungspfad.                                                                        |
+| `/` als Unterordner                    | Behält durch Vorlagenvariablen erzeugte Ebenen bei.                                                                                    |
+| Automatisch beim Hinzufügen umbenennen | Globale Zotero-Einstellung zur Umbenennung neuer Anhänge.                                                                              |
+| Importierte PDF-Metadaten abrufen      | Erkennt eigenständige importierte PDFs automatisch; Umbenennen/Verschieben beginnt erst nach Erstellung des übergeordneten Eintrags. |
+| Bei Eintragsänderung umbenennen        | Optionale nachträgliche Umbenennung mit Zeiten in Millisekunden.                                                                       |
+| Automatisch verschieben                | Wandelt neue importierte Anhänge in verknüpfte Dateien um; bestehende Verknüpfungen werden nicht erneut automatisch verschoben.        |
+| Leere Ordner löschen                   | Bereinigt nur innerhalb des Zotero-Speichers, Quell- oder Zielpfads.                                                                   |
+| Originaldateien behalten               | Macht aus Verschieben ein Kopieren und verhindert Quellbereinigung.                                                                    |
+| Anhangstitel synchronisieren           | Aktualisiert nach dem Umbenennen den Titel in Zotero.                                                                                  |
+| Diakritische Zeichen entfernen         | Wandelt Diakritika und Ligaturen im endgültigen Basisnamen einschließlich eines beibehaltenen Präfixes um; die Endung bleibt.          |
+| Dateitypen                             | Kommagetrennte Endungen ohne Punkt. Standard: `pdf,doc,docx,txt,rtf,djvu,epub`.                                                        |
+| Dateinamensregeln                      | Kommagetrennte reguläre Ausdrücke für Präfixe und Ausnahmen.                                                                           |
 
 Ungültige reguläre Ausdrücke werden ignoriert und protokolliert, ohne die
 Verarbeitung abzubrechen.

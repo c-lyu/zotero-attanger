@@ -18,6 +18,7 @@ const RENAME_MENU_ID = "attanger-rename-attachment";
 const RENAME_MOVE_MENU_ID = "attanger-rename-move-attachment";
 const MOVE_MENU_ID = "attanger-move-attachment";
 const UNDO_MOVE_MENU_ID = "attanger-undo-move-attachment";
+const PDF_RECOGNIZER_TIMEOUT_MS = 30_000;
 
 /**
  * 菜单项后缀显示的快捷键提示，如 " (Ctrl + I)"；快捷键未启用或未设置时为空
@@ -47,6 +48,9 @@ function getSelectedCollectionCompat() {
 const movingPaths = new Set<string>();
 /** Attanger 正在修改的附件，避免自身 saveTx 再次触发自动重命名 */
 const attachmentMutationInFlight = new Set<number>();
+/** Attanger 新建的链接附件，其 add 通知不应再次触发自动处理 */
+const automaticallyCreatedLinkedAttachmentIDs = new Set<number>();
+const AUTOMATIC_LINKED_ATTACHMENT_IGNORE_MS = 30_000;
 export default class Menu {
   private notifierID?: string;
   private pendingAddedItemIDs = new Set<number>();
@@ -112,6 +116,10 @@ export default class Menu {
     for (const id of ids) {
       const numericID = Number(id);
       if (Number.isInteger(numericID)) {
+        if (automaticallyCreatedLinkedAttachmentIDs.has(numericID)) {
+          this.pendingAddedItemIDs.delete(numericID);
+          continue;
+        }
         this.pendingAddedItemIDs.add(numericID);
       }
     }
@@ -189,6 +197,12 @@ export default class Menu {
     for (const item of Zotero.Items.get(ids)) {
       try {
         if (!item || this.isAutomaticProcessingCancelled(item)) continue;
+        // moveFile replaces an imported attachment with a linked attachment.
+        // Its add notification must not start a second rename pass, which can
+        // remove the collision suffix and make multiple items share one path.
+        if (automaticallyCreatedLinkedAttachmentIDs.has(item.id)) {
+          continue;
+        }
         if (item.isAttachment() && (await item.fileExists())) {
           if (!this.isAutomaticProcessingCancelled(item)) {
             attachments.set(item.id, item);
@@ -198,6 +212,7 @@ export default class Menu {
             const attachment = Zotero.Items.get(attachmentID);
             if (
               attachment &&
+              !automaticallyCreatedLinkedAttachmentIDs.has(attachment.id) &&
               !this.isAutomaticProcessingCancelled(attachment) &&
               attachment.isAttachment() &&
               (await attachment.fileExists())
@@ -222,6 +237,28 @@ export default class Menu {
   private async processAddedAttachment(att: Zotero.Item) {
     try {
       if (this.isAutomaticProcessingCancelled(att)) return;
+      const isStandaloneImportedPDF =
+        !att.parentItemID && att.isImportedAttachment() && isPDFAttachment(att);
+      if (isStandaloneImportedPDF) {
+        if (!getPref("autoRecognizeImportedPDF")) {
+          ztoolkit.log(
+            "Automatic processing skipped: standalone PDF recognition is disabled",
+            att.id,
+          );
+          return;
+        }
+        await Zotero.RecognizeDocument.recognizeItems([att]);
+        const recognizedAttachment = await Zotero.Items.getAsync(att.id);
+        if (!recognizedAttachment?.parentItemID) {
+          ztoolkit.log(
+            "Automatic processing skipped: PDF recognition created no parent item",
+            att.id,
+          );
+          return;
+        }
+        att = recognizedAttachment;
+        if (this.isAutomaticProcessingCancelled(att)) return;
+      }
       const canProcess = checkFileType(att);
       const filenameNoExt = canProcess
         ? await getAttachmentFilenameNoExt(att)
@@ -231,12 +268,20 @@ export default class Menu {
         showAttachmentItem(att);
         return;
       }
-      if (
+      const shouldRename =
+        canProcess && Boolean(Zotero.Prefs.get("autoRenameFiles"));
+      const shouldMoveImportedAttachment =
         canProcess &&
         att.isImportedAttachment() &&
         getPref("autoMove") &&
-        getPref("attachType") == "linking"
-      ) {
+        getPref("attachType") == "linking";
+      if (shouldRename && shouldMoveImportedAttachment) {
+        // Imported files are Zotero-managed copies. Rename them before they
+        // enter the shared destination so moveFile can resolve collisions.
+        this.cancelLinkedAttachmentRenameOnModify(att.id);
+        await renameFile(att);
+      }
+      if (shouldMoveImportedAttachment) {
         const sourceAttachment = att;
         const moved = await moveFile(att, {
           silent: true,
@@ -247,7 +292,7 @@ export default class Menu {
         att = moved;
       }
       if (this.isAutomaticProcessingCancelled(att)) return;
-      if (canProcess && Zotero.Prefs.get("autoRenameFiles")) {
+      if (shouldRename && !shouldMoveImportedAttachment) {
         this.cancelLinkedAttachmentRenameOnModify(att.id);
         await renameFile(att);
       }
@@ -1315,6 +1360,13 @@ function shouldSyncAttachmentTitle(
   return title === "PDF" && attItem.attachmentContentType === "application/pdf";
 }
 
+function isPDFAttachment(attItem: Zotero.Item) {
+  return (
+    attItem.attachmentContentType === "application/pdf" ||
+    attItem.attachmentFilename?.toLowerCase().endsWith(".pdf")
+  );
+}
+
 function removeFilenameDiacritics(filename: string) {
   if (!getPref("removeDiacritics")) return filename;
   const utilities = Zotero.Utilities as {
@@ -1407,7 +1459,7 @@ export async function moveFile(
   }
   movingPaths.add(sourcePath);
   try {
-    return await _moveFile(attItem, sourcePath, destDir, isCancelled);
+    return await _moveFile(attItem, sourcePath, destDir, isCancelled, silent);
   } finally {
     movingPaths.delete(sourcePath);
   }
@@ -1418,6 +1470,7 @@ async function _moveFile(
   sourcePath: string,
   destDir: string,
   shouldCancel: () => boolean,
+  silent: boolean,
 ) {
   if (shouldCancel()) return;
   const filename = PathUtils.filename(sourcePath);
@@ -1432,9 +1485,8 @@ async function _moveFile(
   }
   if (await pathExists(destPath)) {
     if (shouldCancel()) return;
-    ztoolkit.log("目标目录存在", file2md5(sourcePath), file2md5(destPath));
-    if (file2md5(sourcePath) != file2md5(destPath)) {
-      ztoolkit.log("不是同一个文件");
+    ztoolkit.log("Target file already exists", destPath);
+    if (!silent) {
       const popupWin = new ztoolkit.ProgressWindow("Attanger", {
         closeTime: -1,
         closeOtherProgressWindows: true,
@@ -1471,34 +1523,11 @@ async function _moveFile(
 
       await lock.promise;
       if (shouldCancel()) return;
-      destPath = await addSuffixToFilename(destPath);
-    } else {
-      // Reuse an existing identical file without creating a second linked item.
-      const parentItem = attItem.parentItemID
-        ? Zotero.Items.get(attItem.parentItemID)
-        : null;
-      const alreadyLinked = parentItem
-        ? await getLinkedAttachmentAtPath(parentItem, destPath, attItem.id)
-        : undefined;
-      if (alreadyLinked) {
-        ztoolkit.log(
-          "moveFile skipped: linked attachment already exists for parent",
-          destPath,
-        );
-        return alreadyLinked;
-      }
-      if (shouldCancel()) return;
-      ztoolkit.log(
-        "moveFile: file already at destination, creating linked item without copy",
-        destPath,
-      );
-      return await replaceWithLinkedAttachment(
-        attItem,
-        destPath,
-        sourcePath,
-        true,
-      );
     }
+    // Attachment identity must be preserved even when file contents happen to
+    // be identical. Sharing an existing path lets a later rename overwrite all
+    // attachments that point to it.
+    destPath = await addSuffixToFilename(destPath);
   }
   // 创建中间路径
   if (!(await createDirectoryPath(destDir))) {
@@ -1521,32 +1550,10 @@ async function _moveFile(
   return await replaceWithLinkedAttachment(attItem, destPath, sourcePath);
 }
 
-async function getLinkedAttachmentAtPath(
-  parentItem: Zotero.Item,
-  path: string,
-  excludeItemID: number,
-) {
-  const normalizedPath = PathUtils.normalize(path);
-  for (const attachmentID of parentItem.getAttachments()) {
-    if (attachmentID === excludeItemID) continue;
-    const attachment = Zotero.Items.get(attachmentID);
-    if (!attachment?.isLinkedFileAttachment()) continue;
-    const attachmentPath = await attachment.getFilePathAsync();
-    if (
-      attachmentPath &&
-      PathUtils.normalize(attachmentPath) === normalizedPath
-    ) {
-      return attachment;
-    }
-  }
-  return undefined;
-}
-
 async function replaceWithLinkedAttachment(
   attItem: Zotero.Item,
   destPath: string,
   sourcePath: string,
-  removeSourceFile = false,
 ) {
   let newAttItem: Zotero.Item | undefined;
   attachmentMutationInFlight.add(attItem.id);
@@ -1559,15 +1566,14 @@ async function replaceWithLinkedAttachment(
     newAttItem.libraryID = attItem.libraryID;
     newAttItem.fromJSON(json);
     await newAttItem.saveTx();
+    const newAttachmentID = newAttItem.id;
+    automaticallyCreatedLinkedAttachmentIDs.add(newAttachmentID);
+    window.setTimeout(
+      () => automaticallyCreatedLinkedAttachmentIDs.delete(newAttachmentID),
+      AUTOMATIC_LINKED_ATTACHMENT_IGNORE_MS,
+    );
     attachmentMutationInFlight.add(newAttItem.id);
     await transferItem(attItem, newAttItem);
-    if (removeSourceFile && !getPref("moveWithoutDeleting")) {
-      try {
-        await IOUtils.remove(sourcePath);
-      } catch (e) {
-        ztoolkit.log("Failed to remove imported source file", sourcePath, e);
-      }
-    }
     await attItem.eraseTx();
     await removeEmptyFolder(PathUtils.parent(sourcePath) as string);
     return newAttItem;
@@ -1635,9 +1641,6 @@ function removeFile(file: any) {
   }
 }
 
-function file2md5(filepath: string) {
-  return Zotero.Utilities.Internal.md5(Zotero.File.pathToFile(filepath));
-}
 /**
  * 获取Item的分类路径
  * @param item
@@ -2137,33 +2140,53 @@ function cleanLigature(filename: string) {
 /**
  * 对Zotero.PDFWorker.getRecognizerData的重写，以便支持直接给出路径。
  */
-async function getPDFData(path: string) {
-  return Zotero.PDFWorker._enqueue(async () => {
-    const buf = new Uint8Array(await IOUtils.read(path)).buffer;
-    let result = {};
-    try {
-      result = await Zotero.PDFWorker._query("getRecognizerData", { buf }, [
-        buf,
-      ]);
-    } catch (e: any) {
-      const error = new Error(
-        `Worker 'getRecognizerData' failed: ${JSON.stringify({
-          error: e.message,
-        })}`,
-      );
+export async function getPDFData(path: string) {
+  let timeoutID: number | undefined;
+  // Zotero 10 can leave the private worker queue pending after a worker
+  // disconnect, so keep filename-based matching available as a fallback.
+  const workerTask = (async () =>
+    Zotero.PDFWorker._enqueue(async () => {
+      const buf = new Uint8Array(await IOUtils.read(path)).buffer;
+      let result = {};
       try {
-        error.name = JSON.parse(e.message).name;
+        result = await Zotero.PDFWorker._query("getRecognizerData", { buf }, [
+          buf,
+        ]);
       } catch (e: any) {
-        ztoolkit.log(e);
+        const error = new Error(
+          `Worker 'getRecognizerData' failed: ${JSON.stringify({
+            error: e.message,
+          })}`,
+        );
+        try {
+          error.name = JSON.parse(e.message).name;
+        } catch (e: any) {
+          ztoolkit.log(e);
+        }
+        ztoolkit.log(error);
+        throw error;
       }
-      ztoolkit.log(error);
-      throw error;
+
+      ztoolkit.log(`Extracted PDF recognizer data for path ${path}`);
+
+      return result;
+    }, false))();
+  const timeoutTask = new Promise<never>((_, reject) => {
+    timeoutID = window.setTimeout(() => {
+      const error = new Error(
+        `PDF recognizer timed out after ${PDF_RECOGNIZER_TIMEOUT_MS} ms`,
+      );
+      ztoolkit.log(error, path);
+      reject(error);
+    }, PDF_RECOGNIZER_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([workerTask, timeoutTask]);
+  } finally {
+    if (timeoutID !== undefined) {
+      window.clearTimeout(timeoutID);
     }
-
-    ztoolkit.log(`Extracted PDF recognizer data for path ${path}`);
-
-    return result;
-  }, false);
+  }
 }
 
 function unregisterNotify(notifyID: string) {

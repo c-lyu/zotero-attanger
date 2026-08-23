@@ -83,6 +83,7 @@ function createHarness(options = {}) {
     copyFallback: [],
     importFromFile: [],
     linkFromFile: [],
+    recognize: [],
     remove: [],
     unregister: [],
     newItems: [],
@@ -93,6 +94,7 @@ function createHarness(options = {}) {
   const defaultPrefs = {
     attachType: "linking",
     autoMove: false,
+    autoRecognizeImportedPDF: true,
     autoRemoveEmptyFolder: false,
     autoRenameOnModify: false,
     autoRenameOnModifyDebounceEnabled: true,
@@ -186,7 +188,12 @@ function createHarness(options = {}) {
       this.fields = {};
       this.tags = [];
       this.note = "";
+      this.renameCalls = [];
       calls.newItems.push(this);
+    }
+
+    get attachmentFilename() {
+      return path.posix.basename(this.currentPath || "");
     }
 
     fromJSON(json) {
@@ -202,11 +209,29 @@ function createHarness(options = {}) {
     async saveTx() {
       items.set(this.id, this);
       this.saveCount = (this.saveCount || 0) + 1;
+      if (
+        this.saveCount === 1 &&
+        this.parentItem &&
+        !this.parentItem.attachmentIDs.includes(this.id)
+      ) {
+        this.parentItem.attachmentIDs.push(this.id);
+      }
+      if (this.saveCount === 1 && options.notifyOnCreatedItemSave) {
+        const addedIDs = options.notifyCreatedItemWithParent
+          ? [this.id, this.parentItemID]
+          : [this.id];
+        await harness.notify("add", addedIDs);
+      }
       return this.id;
     }
 
     async eraseTx() {
       items.delete(this.id);
+      if (this.parentItem) {
+        this.parentItem.attachmentIDs = this.parentItem.attachmentIDs.filter(
+          (id) => id !== this.id,
+        );
+      }
       this.erased = true;
     }
 
@@ -222,12 +247,29 @@ function createHarness(options = {}) {
       return true;
     }
 
+    isImportedAttachment() {
+      return false;
+    }
+
     isLinkedFileAttachment() {
       return true;
     }
 
     async getFilePathAsync() {
       return this.currentPath;
+    }
+
+    async renameAttachmentFile(newName) {
+      this.renameCalls.push(newName);
+      const previousPath = this.currentPath;
+      this.currentPath = path.posix.join(
+        path.posix.dirname(previousPath),
+        newName,
+      );
+      if (files.delete(previousPath)) {
+        files.add(this.currentPath);
+      }
+      return true;
     }
 
     getField(name) {
@@ -293,6 +335,9 @@ function createHarness(options = {}) {
       if (options.ioCopy) {
         await options.ioCopy(source, destination, harness);
       } else {
+        if (options.rejectExistingCopy && files.has(destination)) {
+          throw new Error(`Destination already exists: ${destination}`);
+        }
         files.add(destination);
       }
     },
@@ -400,8 +445,8 @@ function createHarness(options = {}) {
       },
     },
     PDFWorker: {
-      _enqueue: async (callback) => callback(),
-      _query: async () => ({}),
+      _enqueue: options.pdfWorkerEnqueue || (async (callback) => callback()),
+      _query: options.pdfWorkerQuery || (async () => ({})),
     },
     Prefs: {
       clear: (key) => prefs.delete(key),
@@ -425,7 +470,12 @@ function createHarness(options = {}) {
       },
     },
     RecognizeDocument: {
-      recognizeItems: async () => {},
+      recognizeItems: async (recognizedItems) => {
+        calls.recognize.push(recognizedItems.map((item) => item.id));
+        if (options.recognizeItems) {
+          await options.recognizeItems(recognizedItems, harness);
+        }
+      },
     },
     Relations: {
       copyObjectSubjectRelations: async () => {},
@@ -538,6 +588,11 @@ function createAttachment(harness, options = {}) {
       calls.erase++;
       if (options.onErase) await options.onErase(this);
       harness.items.delete(this.id);
+      if (this.parentItem) {
+        this.parentItem.attachmentIDs = this.parentItem.attachmentIDs.filter(
+          (id) => id !== this.id,
+        );
+      }
     },
     async fileExists() {
       if (options.fileExists) return options.fileExists(this);
@@ -580,7 +635,11 @@ function createAttachment(harness, options = {}) {
     async renameAttachmentFile(newName) {
       calls.rename.push(newName);
       if (options.renameResult === false) return false;
+      const previousPath = currentPath;
       currentPath = path.posix.join(path.posix.dirname(currentPath), newName);
+      if (harness.files.delete(previousPath)) {
+        harness.files.add(currentPath);
+      }
       return true;
     },
     async saveTx() {
@@ -595,7 +654,7 @@ function createAttachment(harness, options = {}) {
     toJSON() {
       return {
         linkMode: options.mode === "linked" ? "linked_file" : "imported_file",
-        parentItemID: parent?.id,
+        parentItemID: this.parentItemID,
         title,
       };
     },

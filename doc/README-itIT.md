@@ -146,22 +146,23 @@ ripetuti vengono deduplicati e i salvataggi di Attanger non creano cicli.
 
 ## Riferimento delle impostazioni
 
-| Impostazione                          | Comportamento                                                                                                              |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Percorso sorgente                     | Cartella usata da Allega nuovo file e dai due comandi di associazione.                                                     |
-| Tipo di allegato                      | Copia archiviata in Zotero o file collegato gestito nella destinazione.                                                    |
-| Destinazione                          | Cartella principale per spostamento/copia in modalità Collegamento.                                                        |
-| Sottocartella                         | Modello basato sui metadati; `{{collection}}` usa il percorso della collezione.                                            |
-| Interpreta `/` come sottocartella     | Mantiene i livelli prodotti dalle variabili del modello.                                                                   |
-| Rinomina automaticamente all'aggiunta | Preferenza globale di Zotero per i nuovi allegati.                                                                         |
-| Rinomina quando cambia l'elemento     | Flusso opzionale dopo la modifica, con tempi in millisecondi.                                                              |
-| Sposta automaticamente                | Converte i nuovi file importati in collegamenti; i collegamenti esistenti non vengono spostati di nuovo automaticamente.   |
-| Elimina cartelle vuote                | Pulisce solo dentro l'archivio Zotero, la sorgente o la destinazione.                                                      |
-| Mantieni file originali               | Trasforma lo spostamento in copia e impedisce la pulizia della sorgente.                                                   |
-| Sincronizza titolo                    | Aggiorna il titolo Zotero dopo una rinomina del file.                                                                      |
-| Rimuovi segni diacritici              | Converte segni diacritici e legature nel nome base finale, incluso un prefisso originale mantenuto; conserva l'estensione. |
-| Tipi di file                          | Estensioni separate da virgole, senza punto. Predefinito: `pdf,doc,docx,txt,rtf,djvu,epub`.                                |
-| Regole nomi file                      | Espressioni regolari separate da virgole per prefissi ed eccezioni.                                                        |
+| Impostazione                          | Comportamento                                                                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Percorso sorgente                     | Cartella usata da Allega nuovo file e dai due comandi di associazione.                                                         |
+| Tipo di allegato                      | Copia archiviata in Zotero o file collegato gestito nella destinazione.                                                        |
+| Destinazione                          | Cartella principale per spostamento/copia in modalità Collegamento.                                                            |
+| Sottocartella                         | Modello basato sui metadati; `{{collection}}` usa il percorso della collezione.                                                |
+| Interpreta `/` come sottocartella     | Mantiene i livelli prodotti dalle variabili del modello.                                                                       |
+| Rinomina automaticamente all'aggiunta | Preferenza globale di Zotero per i nuovi allegati.                                                                             |
+| Recupera metadati dei PDF importati   | Riconosce automaticamente i PDF importati autonomi; rinomina/spostamento inizia solo dopo la creazione dell'elemento padre.      |
+| Rinomina quando cambia l'elemento     | Flusso opzionale dopo la modifica, con tempi in millisecondi.                                                                  |
+| Sposta automaticamente                | Converte i nuovi file importati in collegamenti; i collegamenti esistenti non vengono spostati di nuovo automaticamente.       |
+| Elimina cartelle vuote                | Pulisce solo dentro l'archivio Zotero, la sorgente o la destinazione.                                                          |
+| Mantieni file originali               | Trasforma lo spostamento in copia e impedisce la pulizia della sorgente.                                                       |
+| Sincronizza titolo                    | Aggiorna il titolo Zotero dopo una rinomina del file.                                                                          |
+| Rimuovi segni diacritici              | Converte segni diacritici e legature nel nome base finale, incluso un prefisso originale mantenuto; conserva l'estensione.     |
+| Tipi di file                          | Estensioni separate da virgole, senza punto. Predefinito: `pdf,doc,docx,txt,rtf,djvu,epub`.                                    |
+| Regole nomi file                      | Espressioni regolari separate da virgole per prefissi ed eccezioni.                                                            |
 
 Le espressioni regolari non valide vengono ignorate e registrate nel log senza
 interrompere l'elaborazione.

@@ -17,6 +17,7 @@ test("auto-rename preferences have defaults and checkbox controls", () => {
   );
 
   assert.match(prefs, /autoRenameOnModify", false/);
+  assert.match(prefs, /autoRecognizeImportedPDF", true/);
   assert.match(prefs, /autoRenameOnModifyDebounceEnabled", true/);
   assert.match(prefs, /autoRenameOnModifyDebounceMs", 1000/);
   assert.match(prefs, /autoRenameOnModifyDelayEnabled", false/);
@@ -25,7 +26,15 @@ test("auto-rename preferences have defaults and checkbox controls", () => {
   assert.match(preferences, /id="auto-rename-on-modify"/);
   assert.match(
     preferences,
-    /<vbox id="auto-rename-on-modify-options" hidden="true" style="margin-inline-start: 2em;">/,
+    /data-l10n-id="auto-recognize-imported-pdf"[\s\S]*?autoRecognizeImportedPDF/,
+  );
+  assert.match(
+    preferenceScript,
+    /ensureBooleanPref\("autoRecognizeImportedPDF", true\)/,
+  );
+  assert.match(
+    preferences,
+    /<vbox\s+id="auto-rename-on-modify-options"\s+hidden="true"\s+style="margin-inline-start: 2em;?"/,
   );
   assert.match(preferences, /<checkbox\s+id="auto-rename-on-modify-debounce"/);
   assert.match(preferences, /<checkbox\s+id="auto-rename-on-modify-delay"/);
@@ -43,11 +52,11 @@ test("auto-rename preferences have defaults and checkbox controls", () => {
   assert.match(preferences, /data-l10n-id="auto-rename-on-modify-delay-help"/);
   assert.match(
     preferences,
-    /id="auto-rename-on-modify-debounce-ms"[\s\S]*?<\/html:input>\s*<hbox data-l10n-id="auto-rename-on-modify-debounce-help"/,
+    /id="auto-rename-on-modify-debounce-ms"[\s\S]*?<\/html:input>\s*<hbox\s+data-l10n-id="auto-rename-on-modify-debounce-help"/,
   );
   assert.match(
     preferences,
-    /id="auto-rename-on-modify-delay-ms"[\s\S]*?<\/html:input>\s*<hbox data-l10n-id="auto-rename-on-modify-delay-help"/,
+    /id="auto-rename-on-modify-delay-ms"[\s\S]*?<\/html:input>\s*<hbox\s+data-l10n-id="auto-rename-on-modify-delay-help"/,
   );
   assert.equal(preferences.match(/cursor: pointer/g)?.length, 3);
   assert.doesNotMatch(preferences, /cursor: help/);
@@ -69,6 +78,7 @@ test("new automation locale keys exist in all supported locales", () => {
     "auto-rename-on-modify",
     "auto-rename-on-modify-debounce",
     "auto-rename-on-modify-delay",
+    "auto-recognize-imported-pdf",
     "remove-diacritics",
   ];
   const helpKeys = [

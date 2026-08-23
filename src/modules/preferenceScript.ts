@@ -13,6 +13,7 @@ export async function registerPrefsScripts(_window: Window) {
   }
   ensureStringPref("filenameSkipRenameRules");
   ensureStringPref("filenameSkipAutoMoveRenameRules");
+  ensureBooleanPref("autoRecognizeImportedPDF", true);
   ensureBooleanPref("autoRenameOnModifyDebounceEnabled", true);
   ensureNumberPref("autoRenameOnModifyDebounceMs", 1000);
   ensureBooleanPref("autoRenameOnModifyDelayEnabled", false);

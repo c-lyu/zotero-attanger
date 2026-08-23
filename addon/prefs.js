@@ -7,6 +7,7 @@ pref("extensions.zotero.__addonRef__.sourceDir", "");
 pref("extensions.zotero.__addonRef__.readPDFtitle", "nonCJK");
 pref("extensions.zotero.__addonRef__.destDir", "");
 pref("extensions.zotero.__addonRef__.autoMove", true);
+pref("extensions.zotero.__addonRef__.autoRecognizeImportedPDF", true);
 pref("extensions.zotero.__addonRef__.autoRenameOnModify", false);
 pref("extensions.zotero.__addonRef__.autoRenameOnModifyDebounceEnabled", true);
 pref("extensions.zotero.__addonRef__.autoRenameOnModifyDebounceMs", 1000);
